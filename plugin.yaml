@@ -1,0 +1,9 @@
+name: a0_strike_team_plugin
+title: 'Strike Team: Core Engagement'
+description: 'Elite engagement suite with Objective Dominance prompts, structured Vault memory, and Hunter Recon Sync.'
+version: 1.0.0
+settings_sections:
+  - agent
+per_project_config: true
+per_agent_config: true
+always_enabled: false
