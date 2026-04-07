@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from python.helpers.recon_paths import get_recon_workdir
+from helpers.crypto import encrypt_data, _generate_private_key, _generate_public_key
 
 
 SCHEMA_VERSION = 1
@@ -42,6 +43,37 @@ def save_recon_memory(data: dict[str, Any]) -> str:
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=2, sort_keys=True)
     return path
+
+
+def _get_recon_keys() -> tuple[str, str]:
+    """Retrieve or generate the RSA key pair for the recon memory."""
+    workdir = get_recon_workdir()
+    directory = os.path.join(workdir, ".a0_data")
+    os.makedirs(directory, exist_ok=True)
+    key_path = os.path.join(directory, "recon_keys.json")
+
+    if os.path.exists(key_path):
+        with open(key_path, "r", encoding="utf-8") as f:
+            keys = json.load(f)
+            return keys["public"], keys["private"]
+
+    # Generate new pair
+    private_key = _generate_private_key()
+    # Serialize private key for storage
+    from cryptography.hazmat.primitives import serialization
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    ).hex()
+    
+    public_pem = _generate_public_key(private_key)
+    
+    keys = {"public": public_pem, "private": private_pem}
+    with open(key_path, "w", encoding="utf-8") as f:
+        json.dump(keys, f)
+        
+    return public_pem, private_pem
 
 
 def persist_recon_surface_report(report: dict[str, Any]) -> dict[str, Any]:
@@ -488,13 +520,18 @@ def persist_loot(
 
     # Create Loot entity
     loot_val = f"{kind}:{username}" if username else f"{kind}:{value[:20]}..."
+    
+    # Encrypt secret value
+    public_key, _ = _get_recon_keys()
+    encrypted_secret = encrypt_data(value, public_key)
+    
     loot_entity = _upsert_entity(
         data,
         entity_type="Loot",
         value=loot_val,
         properties={
             "kind": kind,
-            "secret": value,  # NOTE: In a real prod env, this should be encrypted
+            "secret": encrypted_secret,
             "username": username,
             "context": context,
             "source": "manual",
